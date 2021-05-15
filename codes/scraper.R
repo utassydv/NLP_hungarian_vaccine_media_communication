@@ -1,5 +1,8 @@
 library(jsonlite)
 library(rvest)
+library(data.table)
+
+source("codes/scraper_helpers.R")
 
 
 # www.origo.hu ------------------------------------------------------------
@@ -19,3 +22,24 @@ articles_origo$content<- lapply(articles_origo$url,function(x){
 saveRDS(articles_origo, file = 'data/raw/articles_origo.rds')
 
 
+
+# www.index.hu ------------------------------------------------------------
+# TODO:
+# notes
+# some json is there but cannot expand url-s with curl :(
+
+
+# www.telex.hu ------------------------------------------------------------
+
+articles_telex <- get_telex_urls('vakcina', 53)
+
+#articles_telex <- head(articles_telex)
+
+articles_telex$content<- lapply(articles_telex$url,function(x){
+  t <- read_html(x)
+  article_text <- t %>% html_nodes('.article-html-content') %>%html_nodes('p') %>% html_text()
+  return(article_text)
+}
+)
+
+saveRDS(articles_telex, file = 'data/raw/articles_telex.rds')
