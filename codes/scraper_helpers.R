@@ -117,6 +117,23 @@ get_telex_urls <- function(searchterm, page_to_download) {
   ret_df <- rbindlist(lapply(links_to_get, get_urls_from_one_page_telex))
   return(ret_df)
 }
+
+scrape_articles_telex <- function(articles_telex){
+  
+  pb <- txtProgressBar(min = 0, max = nrow(articles_telex), style = 3)
+  
+  articles_telex$content<- lapply(seq_along(articles_telex$url),function(i){
+    t <- read_html(articles_telex$url[[i]])
+    article_text <- t %>% html_nodes('.article-html-content') %>%html_nodes('p') %>% html_text()
+    setTxtProgressBar(pb, i)
+    return(article_text)
+  }
+  )
+  return(articles_telex)
+}
+
+# Scrape text from the given urls
+
   
 
 # 24.hu helpers -----------------------------------------------------------
@@ -124,6 +141,7 @@ get_urls_from_one_page_24hu  <- function(my_url) {
   print(my_url)
   t <- read_html(my_url)
   boxes <- t %>% html_nodes('.-hasImg')
+  boxes <- append(boxes, t %>% html_nodes('.-noImg')) 
   x <- boxes[[1]]
   boxes_df <- lapply(boxes, function(x){
     t_list <- list()
@@ -142,6 +160,21 @@ get_24hu_urls <- function(searchterm, page_to_download) {
   links_to_get <- paste0('https://24.hu/page/', seq(1, page_to_download) ,'/?s=', searchterm)
   ret_df <- rbindlist(lapply(links_to_get, get_urls_from_one_page_24hu))
   return(ret_df)
+}
+
+scrape_articles_24hu <- function(articles_24hu){
+  
+  pb <- txtProgressBar(min = 0, max = nrow(articles_24hu), style = 3)
+  
+  articles_24hu$content <- lapply(seq_along(articles_24hu$url), function(i){
+    Sys.sleep(1) # sleep is set otherwise 24.hu blocks me
+    t <- read_html(articles_24hu$url[[i]])
+    article_text <- t %>% html_nodes('.post-body p , p+ ul li') %>% html_text()
+    setTxtProgressBar(pb, i)
+    return(article_text)
+  }
+  )
+  return(articles_24hu)
 }
 
 # 444.hu helpers -----------------------------------------------------------

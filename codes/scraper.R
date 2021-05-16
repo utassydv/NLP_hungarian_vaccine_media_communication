@@ -58,18 +58,10 @@ saveRDS(articles_telex, file = 'data/raw/articles_telex.rds')
 
 # Collect vaccination related articles
 articles_24hu <- get_24hu_urls('vakcina', 42)
-articles_24hu <- head(articles_24hu)
-pb <- txtProgressBar(min = 0, max = nrow(articles_24hu), style = 3)
 
 # Scrape text from the given urls
-articles_24hu$content <- lapply(seq_along(articles_24hu$url), function(i){
-  Sys.sleep(1) # sleep is set otherwise 24.hu blocks me
-  t <- read_html(articles_24hu$url[[i]])
-  article_text <- t %>% html_nodes('.post-body p , p+ ul li') %>% html_text()
-  setTxtProgressBar(pb, i)
-  return(article_text)
-}
-)
+articles_24hu <- scrape_articles_24hu(articles_24hu)
+
 
 saveRDS(articles_24hu, file= 'data/raw/articles_24hu.rds')
 
