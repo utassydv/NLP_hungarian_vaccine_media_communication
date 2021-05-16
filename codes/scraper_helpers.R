@@ -92,6 +92,54 @@ get_urls_from_index <- function(number_of_pages){
   return(articles_df)
 }
 
+scrape_articles_index <- function(articles_index){
+  ua <- user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36")
+  
+  pb <- txtProgressBar(min = 0, max = nrow(articles_index), style = 3)
+  
+  
+  articles_index$content <- lapply(seq_along(articles_index$url),function(i){
+    #Sys.sleep(3) # sleep is set otherwise Index blocks me
+    
+    t <- NULL
+    
+    try(
+      t<- read_html(articles_index$url[[i]], user_agent=ua)
+    )
+    
+    if (is.null(t)){
+      attempt <- 1
+      while(is.null(t) && attempt <= 5){
+        Sys.sleep(sample(1:5, 1))
+        attempt <- attempt + 1
+        try(
+          t<- read_html(articles_index$url[[i]], user_agent=ua)
+        )
+      }
+    }
+    
+    if (is.null(t)){
+      article_text <- NaN
+      message("MISSED ARTICLE", articles_index$url[[i]])
+      setTxtProgressBar(pb, i)
+    }
+    else{
+      article_text <- t %>% 
+        html_nodes('.anti_xsl p , p+ p , div+ p') %>% 
+        html_text()
+      print(articles_index$url[[i]])
+      setTxtProgressBar(pb, i)
+    }
+    
+    return(article_text)
+  }
+  )
+  
+  return(articles_index)
+}
+
+
+
 # telex.hu helpers --------------------------------------------------------
 get_urls_from_one_page_telex  <- function(my_url) {
   print(my_url)

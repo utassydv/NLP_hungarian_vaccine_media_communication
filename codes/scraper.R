@@ -22,21 +22,9 @@ saveRDS(articles_origo, file = 'data/raw/articles_origo.rds')
 # www.index.hu ------------------------------------------------------------
 
 articles_index <- get_urls_from_index(84)
-articles_index <- filter(articles_index, date_time > 2020)
+#articles_index <- filter(articles_index, date_time > 2020)
 
-pb <- txtProgressBar(min = 0, max = nrow(articles_index), style = 3)
-articles_index$content <- lapply(seq_along(articles_index$url),function(i){
-  #Sys.sleep(3) # sleep is set otherwise Index blocks me
-  
-  t<- read_html(articles_index$url[[i]])
-  article_text <- t %>% 
-    html_nodes('.anti_xsl p , p+ p , div+ p') %>% 
-    html_text()
-  print(articles_index$url[[i]])
-  setTxtProgressBar(pb, i)
-  return(article_text)
-}
-)
+articles_index <- scrape_articles_index(articles_index)
 
 saveRDS(articles_index, file= 'data/raw/articles_index.rds')
 
