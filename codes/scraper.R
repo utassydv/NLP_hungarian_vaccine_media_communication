@@ -16,7 +16,7 @@ pb <- txtProgressBar(min = 0, max = nrow(articles_origo), style = 3)
 articles_origo <- scrape_articles_origo(articles_origo)
 
 saveRDS(articles_origo, file = 'data/raw/articles_origo.rds')
-
+#TODO rerun without VPN!
 
 
 # www.index.hu ------------------------------------------------------------
@@ -40,18 +40,16 @@ articles_index$content <- lapply(seq_along(articles_index$url),function(i){
 
 saveRDS(articles_index, file= 'data/raw/articles_index.rds')
 
+#TODO refactor to helpers
+#TODO try to solve blocking issues 
+
 # www.telex.hu ------------------------------------------------------------
 
 # Collect vaccination related articles
 articles_telex <- get_telex_urls('vakcina', 53)
 
-# Scrape text from the given urls
-articles_telex$content<- lapply(articles_telex$url,function(x){
-  t <- read_html(x)
-  article_text <- t %>% html_nodes('.article-html-content') %>%html_nodes('p') %>% html_text()
-  return(article_text)
-}
-)
+# Getting all the articles
+articles_telex <- scrape_articles_telex(articles_telex)
 
 saveRDS(articles_telex, file = 'data/raw/articles_telex.rds')
 
