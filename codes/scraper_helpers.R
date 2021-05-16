@@ -205,4 +205,22 @@ get_444hu_urls <- function(searchterm, page_to_download) {
   return(ret_df)
 }
 
+
+scrape_articles_444hu <- function(articles_444hu){
+  
+  pb <- txtProgressBar(min = 0, max = nrow(articles_444hu), style = 3)
+  
+  # Scrape text from the given urls
+  articles_444hu$content <- lapply(seq_along(articles_444hu$url),function(i){
+    Sys.sleep(1) # sleep is set otherwise 444 blocks me
+    t<- read_html(articles_444hu$url[[i]])
+    article_text <- t %>% html_node('#content-main') %>% html_nodes('p') %>% html_text()
+    article_text <- article_text[1:length(article_text)-1]
+    setTxtProgressBar(pb, i)
+    return(article_text)
+  }
+  )
+  
+  return(articles_444hu)
+}
   

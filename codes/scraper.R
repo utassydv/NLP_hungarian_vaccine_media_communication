@@ -69,17 +69,7 @@ saveRDS(articles_24hu, file= 'data/raw/articles_24hu.rds')
 
 # Collect vaccination related articles
 articles_444hu <- get_444hu_urls('vakcina', 28)
-pb <- txtProgressBar(min = 0, max = nrow(articles_444hu), style = 3)
 
-# Scrape text from the given urls
-articles_444hu$content <- lapply(seq_along(articles_444hu$url),function(i){
-  Sys.sleep(1) # sleep is set otherwise 444 blocks me
-  t<- read_html(articles_444hu$url[[i]])
-  article_text <- t %>% html_node('#content-main') %>% html_nodes('p') %>% html_text()
-  article_text <- article_text[1:length(article_text)-1]
-  setTxtProgressBar(pb, i)
-  return(article_text)
-}
-)
+articles_444hu <- scrape_articles_444hu(articles_444hu)
 
 saveRDS(articles_444hu, file= 'data/raw/articles_444hu.rds')
