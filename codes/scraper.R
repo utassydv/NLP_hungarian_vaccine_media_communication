@@ -12,14 +12,8 @@ source("codes/scraper_helpers.R")
 articles_origo <- fromJSON('https://www.origo.hu/api/article-search?h=www.origo.hu&h=kepek.origo.hu&iai=true&q=vakcina&hits=8000')$result
 pb <- txtProgressBar(min = 0, max = nrow(articles_origo), style = 3)
 
-# Scrape text from the given urls
-articles_origo$content<- lapply(seq_along(articles_origo$url),function(i){
-  t <- read_html(articles_origo$url[[i]])
-  article_text <- t %>% html_nodes('p') %>% html_text()
-  setTxtProgressBar(pb, i)
-  return(article_text)
-}
-)
+# Getting all the articles
+articles_origo <- scrape_articles_origo(articles_origo)
 
 saveRDS(articles_origo, file = 'data/raw/articles_origo.rds')
 
@@ -44,7 +38,7 @@ articles_index$content <- lapply(seq_along(articles_index$url),function(i){
 }
 )
 
-saveRDS(articles_index, file= 'data/raw/articles_index')
+saveRDS(articles_index, file= 'data/raw/articles_index.rds')
 
 # www.telex.hu ------------------------------------------------------------
 

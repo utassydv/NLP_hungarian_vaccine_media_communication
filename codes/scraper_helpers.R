@@ -1,3 +1,55 @@
+# origo.hu helpers --------------------------------------------------------
+
+
+scrape_articles_origo <- function(articles_origo){
+  
+  pb <- txtProgressBar(min = 0, max = nrow(articles_origo), style = 3)
+  
+  articles_origo$content <- lapply(seq_along(articles_origo$url),function(i){
+    t <- tryCatch(
+      {
+        read_html(articles_origo$url[[i]])
+      },
+      error=function(cond) 
+      {
+        message(paste("URL caused a error:", articles_origo$url[[i]]))
+        message("Here's the original error message:")
+        message(cond)
+        return(NA)
+      },
+      warning=function(cond) 
+      {
+        message(paste("URL caused a warning:", articles_origo$url[[i]]))
+        message("Here's the original warning message:")
+        message(cond)
+        return(NA)
+      },
+      finally={
+        #setTxtProgressBar(pb, i)
+      }
+    )
+    
+    article_text <- tryCatch(
+      {
+        t %>% html_nodes('p') %>% html_text()
+      },
+      error=function(cond)
+      {
+        message("ERROR: Skipping html_node")
+      },
+      warning=function(cond) 
+      {
+        message("WARNING: Skipping html_node")
+      },
+      finally={
+        setTxtProgressBar(pb, i)
+      }
+    )
+    return(article_text)
+  }
+  )
+  return(articles_origo)
+}
 
 # index.hu helpers --------------------------------------------------------
 require(httr)
