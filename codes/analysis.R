@@ -9,6 +9,7 @@ library(viridis)
 library(stringr)
 library(igraph)
 library(ggraph)
+library(topicmodels)
 
 # data preparation ------------------------------------------------------------
 
@@ -34,72 +35,50 @@ articles_24hu$date <- as.Date(ymd_hm(articles_24hu$date_time))
 articles_index$date <- as.Date(ymd_hms(articles_index$date_time))
 articles_origo$date <- as.Date(ymd_hms(articles_origo$date_time))
 
-# filtering for covid-19 times > 2020
-
-articles_telex <- articles_telex %>% filter(date >= as.Date('2020-01-01'))
-articles_24hu <- articles_24hu %>% filter(date >= as.Date('2020-01-01'))
-articles_index <- articles_index %>% filter(date >= as.Date('2020-01-01'))
-articles_origo <- articles_origo %>% filter(date >= as.Date('2020-01-01'))
 
 # combine all the news sites:
 all_sites <- rbind(articles_telex,articles_24hu, articles_index, articles_origo)
 
-# concatenating paragraphs withing articles
-articles_telex$content_full <- mapply(paste, articles_telex$content, sep = ' ', collapse =' ')
-articles_24hu$content_full <- mapply(paste, articles_24hu$content, sep = ' ', collapse =' ')
-articles_index$content_full <- mapply(paste, articles_index$content, sep = ' ', collapse =' ')
-articles_origo$content_full <- mapply(paste, articles_origo$content, sep = ' ', collapse =' ')
+# filtering for covid-19 times > 2020
+all_sites <- all_sites %>% filter(date >= as.Date('2020-01-01'))
 
+# concatenating paragraphs withing articles
 all_sites$content_full <- mapply(paste, all_sites$content, sep = ' ', collapse =' ')
+
 
 
 # word frequency analysis -------------------------------------------------
 
 # unnest_tokens
-tidy_articles_telex <- articles_telex %>% unnest_tokens(word, content_full)
-tidy_articles_24hu <- articles_24hu %>% unnest_tokens(word, content_full)
-tidy_articles_index <- articles_index %>% unnest_tokens(word, content_full)
-tidy_articles_origo <- articles_origo %>% unnest_tokens(word, content_full)
+tidy_all_sites <- all_sites %>% unnest_tokens(word, content_full)
 
 # removing stop words
 hu_stop_word <- read_csv("https://raw.githubusercontent.com/stopwords-iso/stopwords-hu/master/stopwords-hu.txt", col_names = FALSE)
 colnames(hu_stop_word) <- "word"
 
-tidy_articles_telex <- tidy_articles_telex %>% anti_join(hu_stop_word)
-tidy_articles_24hu <- tidy_articles_24hu %>% anti_join(hu_stop_word)
-tidy_articles_index <- tidy_articles_index %>% anti_join(hu_stop_word)
-tidy_articles_origo <- tidy_articles_origo %>% anti_join(hu_stop_word)
+tidy_all_sites <- tidy_all_sites %>% anti_join(hu_stop_word)
 
-# some basic summary
-summary_telex <- tidy_articles_telex %>% count(word, sort = TRUE)
-summary_24hu <- tidy_articles_24hu %>% count(word, sort = TRUE)
-summary_index <- tidy_articles_index %>% count(word, sort = TRUE)
-summary_origo <- tidy_articles_origo %>% count(word, sort = TRUE)
-
-# some basic plots
-tidy_articles_telex %>%
+# summary plot on frequent words
+frequent_words <- tidy_all_sites %>%
+  group_by(site) %>% 
   count(word, sort = TRUE) %>%
-  filter(n > 800) %>%
-  mutate(word = reorder(word, n)) %>%
-  ggplot(aes(word, n)) + geom_col() + xlab(NULL) + coord_flip()
-
-tidy_articles_origo %>%
-  count(word, sort = TRUE) %>%
-  filter(n > 2000) %>%
-  mutate(word = reorder(word, n)) %>%
-  ggplot(aes(word, n)) + geom_col() + xlab(NULL) + coord_flip()
+  top_n(15) %>%
+  mutate(word = reorder_within(word, n, site)) %>%
+  ggplot(aes(word, n, fill=site)) + geom_col(show.legend = FALSE) + xlab(NULL) + ylab(NULL) +  coord_flip() +
+  facet_wrap(~site, ncol=2, scales = "free") +
+  scale_x_reordered()
+frequent_words
+ggsave("plots/frequent_words.png", plot = frequent_words)
 
 # comparing sites on word frequency
-frequency <- bind_rows(mutate(tidy_articles_origo, site = "www.origo.hu"),
-                       mutate(tidy_articles_telex, site = "www.telex.hu"),
-                       mutate(tidy_articles_index, site = "www.index.hu"),
-                       mutate(tidy_articles_24hu, site = "www.24.hu")
-                      ) %>%
+frequency <- tidy_all_sites %>% 
   count(site, word) %>%
   group_by(site) %>%
   mutate(proportion = n / sum(n)) %>% 
   select(-n) %>% 
   spread(site, proportion)
+
+colnames(frequency) <- c("word", "www.24.hu", "www.index.hu", "www.origo.hu", "www.telex.hu")
 
 frequency <- frequency %>% mutate(www.origo.hu = coalesce(www.origo.hu,0),
                             www.telex.hu = coalesce(www.telex.hu,0),
@@ -128,14 +107,14 @@ heatmap<- ggplot(melt(matrix), aes(x = Var1, y = Var2, fill = value)) +
 )
 ggsave("plots/heatmap.png", plot = heatmap)
 
-p <- ggplot(frequency, aes(x = www.telex.hu, y = www.origo.hu, label = word)) + 
+telex_origo <- ggplot(frequency, aes(x = www.telex.hu, y = www.origo.hu, label = word)) + 
   geom_point(alpha=0.3) +
   geom_text(aes(label=word),hjust=0.5, vjust=-1, alpha=0.5) +
   geom_abline()
-ggsave("plots/compare_telex_origo.png", plot = p)
+ggsave("plots/compare_telex_origo.png", plot = telex_origo)
+
 
 # Sentiment analysis ------------------------------------------------------
-
 positive_words <- read_csv("data/PrecoSenti/PrecoPos.txt", col_names = FALSE) %>%
   mutate(sentiment=1)
 negative_words <- read_csv("data/PrecoSenti/PrecoNeg.txt", col_names = FALSE) %>%
@@ -144,14 +123,41 @@ negative_words <- read_csv("data/PrecoSenti/PrecoNeg.txt", col_names = FALSE) %>
 hungarian_sentiment <- rbind(positive_words, negative_words)
 colnames(hungarian_sentiment) <- c('word', 'sentiment')
 
-articles_telex_senitiment <- tidy_articles_telex %>% inner_join(hungarian_sentiment)
+tidy_all_sites_sentiment <- tidy_all_sites %>% inner_join(hungarian_sentiment)
 
-sentiments_contribution_telex <- articles_telex_senitiment %>%
-  count(word, sentiment) %>% mutate(word = reorder(word, n)) %>%
-  filter(n>80) %>% 
+sentiment_contributions <- tidy_all_sites_sentiment %>%
+  group_by(site) %>% 
+  count(word, sentiment) %>% 
+  mutate(word = reorder_within(word, abs(n), site)) %>%
+  top_n(20) %>% 
+  mutate(word = reorder_within(word, n, site)) %>%
   ggplot(aes(word, n * sentiment, fill = sentiment)) + geom_col(show.legend = FALSE) +
-  labs(y = "Contribution to sentiment", x = NULL) + coord_flip()
-ggsave("plots/sentiments_contribution_telex.png", plot = sentiments_contribution_telex)
+  labs(y = "Contribution to sentiment", x = NULL) + coord_flip() +
+  facet_wrap(~site, ncol=2, scales = "free") +
+  scale_x_reordered()
+sentiment_contributions
+ggsave("plots/sentiment_contributions.png", plot = sentiment_contributions)
+
+# positive negative issue:
+hungarian_sentiment <- hungarian_sentiment %>% 
+  filter(!(word %in% c('pozitív','negatív')))
+tidy_all_sites_sentiment <- tidy_all_sites %>% inner_join(hungarian_sentiment)
+
+sentiment_contributions_fixed <- tidy_all_sites_sentiment %>%
+  group_by(site) %>% 
+  count(word, sentiment) %>% 
+  mutate(word = reorder_within(word, abs(n), site)) %>%
+  top_n(20) %>% 
+  mutate(word = reorder_within(word, n, site)) %>%
+  ggplot(aes(word, n * sentiment, fill = sentiment)) + geom_col(show.legend = FALSE) +
+  labs(y = "Contribution to sentiment", x = NULL) + coord_flip() +
+  facet_wrap(~site, ncol=2, scales = "free") +
+  scale_x_reordered()
+sentiment_contributions_fixed
+ggsave("plots/sentiment_contributions_fixed.png", plot = sentiment_contributions_fixed)
+
+#TODO: time series sentiment
+#TODO: compare average sentiment of sites
 
 
 # tf-idf ------------------------------------------------------------------
@@ -272,6 +278,19 @@ network_all <- summary_bigrams_all_sites %>%
 network_all
 ggsave("plots/network_all.png", plot = network_all)
 
+
+
+# LDA ---------------------------------------------------------------------
+
+
+chapters_dtm <- word_counts %>%
+  cast_dtm(document, word, n)
+
+chapters_dtm
+
+
+data("AssociatedPress")
+a<- AssociatedPress
 
 # TODO: network graphs by articles
 
