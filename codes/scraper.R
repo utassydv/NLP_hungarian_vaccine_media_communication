@@ -15,6 +15,7 @@ pb <- txtProgressBar(min = 0, max = nrow(articles_origo), style = 3)
 # Getting all the articles
 articles_origo <- scrape_articles_origo(articles_origo)
 
+articles_origo$site <- 'origo'
 saveRDS(articles_origo, file = 'data/raw/articles_origo.rds')
 #TODO rerun without VPN!
 
@@ -26,10 +27,8 @@ articles_index <- get_urls_from_index(84)
 
 articles_index <- scrape_articles_index(articles_index)
 
+articles_index$site <- 'index'
 saveRDS(articles_index, file= 'data/raw/articles_index.rds')
-
-#TODO refactor to helpers
-#TODO try to solve blocking issues 
 
 # www.telex.hu ------------------------------------------------------------
 
@@ -39,6 +38,7 @@ articles_telex <- get_telex_urls('vakcina', 53)
 # Getting all the articles
 articles_telex <- scrape_articles_telex(articles_telex)
 
+articles_telex$site <- 'telex'
 saveRDS(articles_telex, file = 'data/raw/articles_telex.rds')
 
 
@@ -50,7 +50,7 @@ articles_24hu <- get_24hu_urls('vakcina', 42)
 # Scrape text from the given urls
 articles_24hu <- scrape_articles_24hu(articles_24hu)
 
-
+articles_24hu$site <- '24hu'
 saveRDS(articles_24hu, file= 'data/raw/articles_24hu.rds')
 
 # www.444.hu ---------------------------------------------------------------
@@ -60,4 +60,5 @@ articles_444hu <- get_444hu_urls('vakcina', 28)
 
 articles_444hu <- scrape_articles_444hu(articles_444hu)
 
+articles_444hu$site <- '444hu'
 saveRDS(articles_444hu, file= 'data/raw/articles_444hu.rds')

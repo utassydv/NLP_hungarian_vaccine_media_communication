@@ -3,16 +3,47 @@ library(Hmisc)
 library(reshape2)
 library(tidyverse)
 library(tidytext)
+library(lubridate)
 library(ggplot2)
 library(viridis)
+library(stringr)
 
-# loading data ------------------------------------------------------------
+# data preparation ------------------------------------------------------------
 
-articles_telex<- readRDS('data/raw/articles_telex.rds')
+articles_telex <- readRDS('data/raw/articles_telex.rds')
 articles_24hu <- readRDS('data/raw/articles_24hu.rds')
 articles_444hu <- readRDS('data/raw/articles_444hu.rds')
 articles_index<- readRDS('data/raw/articles_index.rds')
 articles_origo<- readRDS('data/raw/articles_origo.rds')
+
+# some cleaning
+articles_origo <- articles_origo %>% select(title=headline,
+                                            url,
+                                            date_time=published, 
+                                            content, 
+                                            site)
+
+# get date from url with stringr
+date_pattern <- "[0-9]{4}/[0-9]{2}/[0-9]{2}"
+articles_444hu$date_time <- str_extract(articles_444hu$url, date_pattern)
+
+# cleaning date_time columns with lubridate
+articles_telex$date <- as.Date(ymd_hm(articles_telex$date_time))
+articles_24hu$date <- as.Date(ymd_hm(articles_24hu$date_time))
+articles_index$date <- as.Date(ymd_hms(articles_index$date_time))
+articles_origo$date <- as.Date(ymd_hms(articles_origo$date_time))
+articles_444hu$date <- as.Date(ymd(articles_444hu$date_time))
+
+# filtering for covid-19 times > 2020
+
+articles_telex <- articles_telex %>% filter(date >= as.Date('2020-01-01'))
+articles_24hu <- articles_24hu %>% filter(date >= as.Date('2020-01-01'))
+articles_index <- articles_index %>% filter(date >= as.Date('2020-01-01'))
+articles_origo <- articles_origo %>% filter(date >= as.Date('2020-01-01'))
+articles_444hu <- articles_444hu %>% filter(date >= as.Date('2020-01-01'))
+
+# combine all the news sites:
+all_sites <- rbind(articles_telex,articles_24hu, articles_444hu, articles_index, articles_origo)
 
 # concatenating paragraphs withing articles
 articles_telex$content_full <- mapply(paste, articles_telex$content, sep = ' ', collapse =' ')
@@ -21,13 +52,17 @@ articles_444hu$content_full <- mapply(paste, articles_444hu$content, sep = ' ', 
 articles_index$content_full <- mapply(paste, articles_index$content, sep = ' ', collapse =' ')
 articles_origo$content_full <- mapply(paste, articles_origo$content, sep = ' ', collapse =' ')
 
+all_sites$content_full <- mapply(paste, all_sites$content, sep = ' ', collapse =' ')
+
+
+# word frequency analysis -------------------------------------------------
 
 # unnest_tokens
-articles_telex <- articles_telex %>% unnest_tokens(word, content_full)
-articles_24hu <- articles_24hu %>% unnest_tokens(word, content_full)
-articles_444hu <- articles_444hu %>% unnest_tokens(word, content_full)
-articles_index <- articles_index %>% unnest_tokens(word, content_full)
-articles_origo <- articles_origo %>% unnest_tokens(word, content_full)
+tidy_articles_telex <- articles_telex %>% unnest_tokens(word, content_full)
+tidy_articles_24hu <- articles_24hu %>% unnest_tokens(word, content_full)
+tidy_articles_444hu <- articles_444hu %>% unnest_tokens(word, content_full)
+tidy_articles_index <- articles_index %>% unnest_tokens(word, content_full)
+tidy_articles_origo <- articles_origo %>% unnest_tokens(word, content_full)
 
 
 
@@ -35,38 +70,38 @@ articles_origo <- articles_origo %>% unnest_tokens(word, content_full)
 hu_stop_word <- read_csv("https://raw.githubusercontent.com/stopwords-iso/stopwords-hu/master/stopwords-hu.txt", col_names = FALSE)
 colnames(hu_stop_word) <- "word"
 
-articles_telex <- articles_telex %>% anti_join(hu_stop_word)
-articles_24hu <- articles_24hu %>% anti_join(hu_stop_word)
-articles_444hu <- articles_444hu %>% anti_join(hu_stop_word)
-articles_index <- articles_index %>% anti_join(hu_stop_word)
-articles_origo <- articles_origo %>% anti_join(hu_stop_word)
+tidy_articles_telex <- tidy_articles_telex %>% anti_join(hu_stop_word)
+tidy_articles_24hu <- tidy_articles_24hu %>% anti_join(hu_stop_word)
+tidy_articles_444hu <- tidy_articles_444hu %>% anti_join(hu_stop_word)
+tidy_articles_index <- tidy_articles_index %>% anti_join(hu_stop_word)
+tidy_articles_origo <- tidy_articles_origo %>% anti_join(hu_stop_word)
 
 # some basic summary
-summary_telex <- articles_telex %>% count(word, sort = TRUE)
-summary_24hu <- articles_24hu %>% count(word, sort = TRUE)
-summary_444hu <- articles_444hu %>% count(word, sort = TRUE)
-summary_index <- articles_index %>% count(word, sort = TRUE)
-summary_origo <- articles_origo %>% count(word, sort = TRUE)
+summary_telex <- tidy_articles_telex %>% count(word, sort = TRUE)
+summary_24hu <- tidy_articles_24hu %>% count(word, sort = TRUE)
+summary_444hu <- tidy_articles_444hu %>% count(word, sort = TRUE)
+summary_index <- tidy_articles_index %>% count(word, sort = TRUE)
+summary_origo <- tidy_articles_origo %>% count(word, sort = TRUE)
 
 # some basic plots
-articles_telex %>%
+tidy_articles_telex %>%
   count(word, sort = TRUE) %>%
   filter(n > 800) %>%
   mutate(word = reorder(word, n)) %>%
   ggplot(aes(word, n)) + geom_col() + xlab(NULL) + coord_flip()
 
-articles_origo %>%
+tidy_articles_origo %>%
   count(word, sort = TRUE) %>%
   filter(n > 2000) %>%
   mutate(word = reorder(word, n)) %>%
   ggplot(aes(word, n)) + geom_col() + xlab(NULL) + coord_flip()
 
 # comparing sites on word frequency
-frequency <- bind_rows(mutate(articles_origo, site = "www.origo.hu"),
-                       mutate(articles_telex, site = "www.telex.hu"),
-                       mutate(articles_index, site = "www.index.hu"),
-                       mutate(articles_24hu, site = "www.24.hu"),
-                       mutate(articles_444hu, site = "www.444.hu"),
+frequency <- bind_rows(mutate(tidy_articles_origo, site = "www.origo.hu"),
+                       mutate(tidy_articles_telex, site = "www.telex.hu"),
+                       mutate(tidy_articles_index, site = "www.index.hu"),
+                       mutate(tidy_articles_24hu, site = "www.24.hu"),
+                       mutate(tidy_articles_444hu, site = "www.444.hu"),
                       ) %>%
   count(site, word) %>%
   group_by(site) %>%
@@ -86,8 +121,6 @@ ds_cor <- frequency %>%
   as.matrix() %>%
   rcorr(type = "spearman")
 correlation_matrix = as.data.frame(ds_cor$r)
-
-heatmap(as.matrix(correlation_matrix))
 
 #corrplot(matrix, diag = FALSE, cl.lim=c(0.2,0.4))#, type='lower', order = 'hclust', tl.srt = 45)
 
@@ -120,11 +153,10 @@ negative_words <- read_csv("data/PrecoSenti/PrecoNeg.txt", col_names = FALSE) %>
 
 hungarian_sentiment <- rbind(positive_words, negative_words)
 colnames(hungarian_sentiment) <- c('word', 'sentiment')
-ggsave("plot.png", plot = p)
 
-articles_telex_senitiment <- articles_telex %>% inner_join(hungarian_sentiment)
+articles_telex_senitiment <- tidy_articles_telex %>% inner_join(hungarian_sentiment)
 
-sentiments_contribution_telex <- example %>%
+sentiments_contribution_telex <- articles_telex_senitiment %>%
   count(word, sentiment) %>% mutate(word = reorder(word, n)) %>%
   filter(n>80) %>% 
   ggplot(aes(word, n * sentiment, fill = sentiment)) + geom_col(show.legend = FALSE) +
@@ -132,3 +164,41 @@ sentiments_contribution_telex <- example %>%
 ggsave("plots/sentiments_contribution_telex.png", plot = sentiments_contribution_telex)
 
 
+# tf-idf ------------------------------------------------------------------
+
+site_words <- all_sites %>% 
+  unnest_tokens(word, content_full) %>% 
+  count(site, word, sort = TRUE) %>% 
+  ungroup()
+
+total_words <- site_words %>% 
+  group_by(site) %>% 
+  summarise(total = sum(n))
+
+site_words <- left_join(site_words, total_words)
+
+term_freq <- ggplot(site_words, aes(n/total, fill=site)) +
+  geom_histogram(show.legend = FALSE) +
+  xlim(NA, 0.00015) +
+  facet_wrap(~site, ncol=2, scales = "free_y")
+ggsave("plots/term_freq.png", plot = term_freq)
+
+freq_by_rank <- site_words %>% 
+  group_by(site) %>% 
+  mutate(rank = row_number(),
+         term_freq = n/total)
+  
+site_words <- site_words %>% 
+  bind_tf_idf(word, site, n)
+
+site_words %>% 
+  arrange(desc(tf_idf)) %>% 
+  mutate(word = factor(word, levels = rev(unique(word)))) %>% 
+  group_by(site) %>% 
+  top_n(10) %>% 
+  ungroup() %>% 
+  ggplot(aes(word, tf_idf, fill = site)) +
+  geom_col(show.legend = F) +
+  labs(x=NULL, y='tf-idf') +
+  facet_wrap(~site, ncol=2, scales = "free") +
+  coord_flip()
