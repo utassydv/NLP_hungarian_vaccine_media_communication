@@ -7,12 +7,13 @@ library(lubridate)
 library(ggplot2)
 library(viridis)
 library(stringr)
+library(igraph)
+library(ggraph)
 
 # data preparation ------------------------------------------------------------
 
 articles_telex <- readRDS('data/raw/articles_telex.rds')
 articles_24hu <- readRDS('data/raw/articles_24hu.rds')
-articles_444hu <- readRDS('data/raw/articles_444hu.rds')
 articles_index<- readRDS('data/raw/articles_index.rds')
 articles_origo<- readRDS('data/raw/articles_origo.rds')
 
@@ -24,15 +25,14 @@ articles_origo <- articles_origo %>% select(title=headline,
                                             site)
 
 # get date from url with stringr
-date_pattern <- "[0-9]{4}/[0-9]{2}/[0-9]{2}"
-articles_444hu$date_time <- str_extract(articles_444hu$url, date_pattern)
+# date_pattern <- "[0-9]{4}/[0-9]{2}/[0-9]{2}"
+# articles_444hu$date_time <- str_extract(articles_444hu$url, date_pattern)
 
 # cleaning date_time columns with lubridate
 articles_telex$date <- as.Date(ymd_hm(articles_telex$date_time))
 articles_24hu$date <- as.Date(ymd_hm(articles_24hu$date_time))
 articles_index$date <- as.Date(ymd_hms(articles_index$date_time))
 articles_origo$date <- as.Date(ymd_hms(articles_origo$date_time))
-articles_444hu$date <- as.Date(ymd(articles_444hu$date_time))
 
 # filtering for covid-19 times > 2020
 
@@ -40,15 +40,13 @@ articles_telex <- articles_telex %>% filter(date >= as.Date('2020-01-01'))
 articles_24hu <- articles_24hu %>% filter(date >= as.Date('2020-01-01'))
 articles_index <- articles_index %>% filter(date >= as.Date('2020-01-01'))
 articles_origo <- articles_origo %>% filter(date >= as.Date('2020-01-01'))
-articles_444hu <- articles_444hu %>% filter(date >= as.Date('2020-01-01'))
 
 # combine all the news sites:
-all_sites <- rbind(articles_telex,articles_24hu, articles_444hu, articles_index, articles_origo)
+all_sites <- rbind(articles_telex,articles_24hu, articles_index, articles_origo)
 
 # concatenating paragraphs withing articles
 articles_telex$content_full <- mapply(paste, articles_telex$content, sep = ' ', collapse =' ')
 articles_24hu$content_full <- mapply(paste, articles_24hu$content, sep = ' ', collapse =' ')
-articles_444hu$content_full <- mapply(paste, articles_444hu$content, sep = ' ', collapse =' ')
 articles_index$content_full <- mapply(paste, articles_index$content, sep = ' ', collapse =' ')
 articles_origo$content_full <- mapply(paste, articles_origo$content, sep = ' ', collapse =' ')
 
@@ -60,11 +58,8 @@ all_sites$content_full <- mapply(paste, all_sites$content, sep = ' ', collapse =
 # unnest_tokens
 tidy_articles_telex <- articles_telex %>% unnest_tokens(word, content_full)
 tidy_articles_24hu <- articles_24hu %>% unnest_tokens(word, content_full)
-tidy_articles_444hu <- articles_444hu %>% unnest_tokens(word, content_full)
 tidy_articles_index <- articles_index %>% unnest_tokens(word, content_full)
 tidy_articles_origo <- articles_origo %>% unnest_tokens(word, content_full)
-
-
 
 # removing stop words
 hu_stop_word <- read_csv("https://raw.githubusercontent.com/stopwords-iso/stopwords-hu/master/stopwords-hu.txt", col_names = FALSE)
@@ -72,14 +67,12 @@ colnames(hu_stop_word) <- "word"
 
 tidy_articles_telex <- tidy_articles_telex %>% anti_join(hu_stop_word)
 tidy_articles_24hu <- tidy_articles_24hu %>% anti_join(hu_stop_word)
-tidy_articles_444hu <- tidy_articles_444hu %>% anti_join(hu_stop_word)
 tidy_articles_index <- tidy_articles_index %>% anti_join(hu_stop_word)
 tidy_articles_origo <- tidy_articles_origo %>% anti_join(hu_stop_word)
 
 # some basic summary
 summary_telex <- tidy_articles_telex %>% count(word, sort = TRUE)
 summary_24hu <- tidy_articles_24hu %>% count(word, sort = TRUE)
-summary_444hu <- tidy_articles_444hu %>% count(word, sort = TRUE)
 summary_index <- tidy_articles_index %>% count(word, sort = TRUE)
 summary_origo <- tidy_articles_origo %>% count(word, sort = TRUE)
 
@@ -100,8 +93,7 @@ tidy_articles_origo %>%
 frequency <- bind_rows(mutate(tidy_articles_origo, site = "www.origo.hu"),
                        mutate(tidy_articles_telex, site = "www.telex.hu"),
                        mutate(tidy_articles_index, site = "www.index.hu"),
-                       mutate(tidy_articles_24hu, site = "www.24.hu"),
-                       mutate(tidy_articles_444hu, site = "www.444.hu"),
+                       mutate(tidy_articles_24hu, site = "www.24.hu")
                       ) %>%
   count(site, word) %>%
   group_by(site) %>%
@@ -112,8 +104,7 @@ frequency <- bind_rows(mutate(tidy_articles_origo, site = "www.origo.hu"),
 frequency <- frequency %>% mutate(www.origo.hu = coalesce(www.origo.hu,0),
                             www.telex.hu = coalesce(www.telex.hu,0),
                             www.index.hu = coalesce(www.index.hu,0),
-                            www.24.hu = coalesce(www.24.hu,0),
-                            www.444.hu = coalesce(www.444.hu,0))
+                            www.24.hu = coalesce(www.24.hu,0))
 
 # creating correlation matrix
 ds_cor <- frequency %>%
@@ -122,7 +113,6 @@ ds_cor <- frequency %>%
   rcorr(type = "spearman")
 correlation_matrix = as.data.frame(ds_cor$r)
 
-#corrplot(matrix, diag = FALSE, cl.lim=c(0.2,0.4))#, type='lower', order = 'hclust', tl.srt = 45)
 
 matrix <- as.matrix(correlation_matrix)
 diag(matrix) <- NA
@@ -202,3 +192,97 @@ site_words %>%
   labs(x=NULL, y='tf-idf') +
   facet_wrap(~site, ncol=2, scales = "free") +
   coord_flip()
+# there are lot of unmeaningful terms here
+# TODO more data cleaning needed!
+
+
+
+# n-gramm analysis --------------------------------------------------------
+
+bigrams_all_sites <- all_sites %>% unnest_tokens(bigram, content_full, token = "ngrams", n = 2) 
+
+# getting hungarian stopwords
+hu_stop_word <- read_csv("https://raw.githubusercontent.com/stopwords-iso/stopwords-hu/master/stopwords-hu.txt", col_names = FALSE)
+colnames(hu_stop_word) <- "word"
+
+# separating bigrams
+bigrams_all_sites <- bigrams_all_sites %>% separate(bigram, c("word1", "word2"), sep = " ", remove  = F)
+
+# filtering out bigrams containing stopwords
+filtered_bigrams_all_sites <- bigrams_all_sites %>% 
+  filter(!word1 %in% hu_stop_word$word) %>% 
+  filter(!word2 %in% hu_stop_word$word)
+
+# some basic summary
+summary_bigrams_all_sites <- filtered_bigrams_all_sites %>% 
+  count(word1, word2, sort = TRUE)
+
+
+# some basic plots
+bigram_freq <- filtered_bigrams_all_sites %>% 
+  group_by(site) %>% 
+  count(bigram, sort = TRUE) %>%
+  top_n(10) %>%
+  mutate(
+    site = as.factor(site),
+    bigram = reorder_within(bigram, n, site)) %>%
+  ggplot(aes(bigram, n, fill=site)) + geom_col(show.legend = FALSE) + xlab(NULL) + coord_flip() +
+  facet_wrap(~site, ncol=2, scales = "free") +
+  scale_x_reordered()
+
+bigram_freq
+ggsave("plots/bigram_freq.png", plot = bigram_freq)
+
+bigrams_all_sites %>% 
+  filter(word1 == 'nem') %>% 
+  count(bigram, sort = TRUE)
+
+not_words <- bigrams_all_sites %>% 
+  filter(word1 == 'nem') %>% 
+  inner_join(hungarian_sentiment, by = c(word2 = 'word')) %>% 
+  count(word2, sentiment, sort = TRUE) %>% 
+  ungroup()
+
+not_words_contribution <- not_words %>%  
+  mutate(contribution = n * sentiment) %>% 
+  arrange(desc(abs(contribution))) %>% 
+  head(20) %>% 
+  mutate(word2 = reorder(word2, contribution)) %>% 
+  ggplot(aes(word2, contribution, fill = contribution > 0)) +
+  geom_col(show.legend = F) +
+  xlab('Word preceded by "nem" which is the hungarian form of "not".') +
+  ylab('Sentiment score * number of occurences') +
+  coord_flip()
+
+ggsave("plots/not_words_contribution.png", plot = not_words_contribution)
+
+# network visualizations
+
+# all sites
+set.seed(2021)
+network_all <- summary_bigrams_all_sites %>%
+  filter(n >= 300) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = 0.6, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()
+network_all
+ggsave("plots/network_all.png", plot = network_all)
+
+
+# TODO: network graphs by articles
+
+# TODO time graphs
+# TODO time related stuff
+
+# TODO covid sentiment lexicon
+# TODO better hungarian lexicon
+
+# TODO LDA
+
+
+
+

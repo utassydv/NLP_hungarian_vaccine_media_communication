@@ -263,7 +263,7 @@ scrape_articles_444hu <- function(articles_444hu){
     Sys.sleep(1) # sleep is set otherwise 444 blocks me
     t<- read_html(articles_444hu$url[[i]])
     article_text <- t %>% html_node('#content-main') %>% html_nodes('p') %>% html_text()
-    article_text <- article_text[1:length(article_text)-1]
+    article_text <- article_text[2:length(article_text)]
     setTxtProgressBar(pb, i)
     return(article_text)
   }
@@ -271,4 +271,9 @@ scrape_articles_444hu <- function(articles_444hu){
   
   return(articles_444hu)
 }
+
+# !startsWith(articles_444hu$content[[1]], 'A 444-en az elénk')
+# c("A 444-en az elénk",
+#   "A kormány nem enged újságírókat az",
+#   "A független magyar sajtónak soha nem volt olyan nehéz dolga")
   
