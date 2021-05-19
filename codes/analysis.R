@@ -49,8 +49,10 @@ all_sites$content_full <- mapply(paste, all_sites$content, sep = ' ', collapse =
 
 # word frequency analysis -------------------------------------------------
 
-# unnest_tokens
-tidy_all_sites <- all_sites %>% unnest_tokens(word, content_full)
+# unnest_tokens + remove numbers
+tidy_all_sites <- all_sites %>% 
+  unnest_tokens(word, content_full) %>% 
+  filter(!str_detect(word, "\\d+"))
 
 # removing stop words
 hu_stop_word <- read_csv("https://raw.githubusercontent.com/stopwords-iso/stopwords-hu/master/stopwords-hu.txt", col_names = FALSE)
@@ -177,6 +179,7 @@ term_freq <- ggplot(site_words, aes(n/total, fill=site)) +
   geom_histogram(show.legend = FALSE) +
   xlim(NA, 0.00015) +
   facet_wrap(~site, ncol=2, scales = "free_y")
+term_freq
 ggsave("plots/term_freq.png", plot = term_freq)
 
 freq_by_rank <- site_words %>% 
@@ -187,7 +190,7 @@ freq_by_rank <- site_words %>%
 site_words <- site_words %>% 
   bind_tf_idf(word, site, n)
 
-site_words %>% 
+tf_idf <- site_words %>% 
   arrange(desc(tf_idf)) %>% 
   mutate(word = factor(word, levels = rev(unique(word)))) %>% 
   group_by(site) %>% 
@@ -198,9 +201,11 @@ site_words %>%
   labs(x=NULL, y='tf-idf') +
   facet_wrap(~site, ncol=2, scales = "free") +
   coord_flip()
+tf_idf
+ggsave("plots/tf_idf.png", plot = tf_idf)
+
 # there are lot of unmeaningful terms here
 # TODO more data cleaning needed!
-
 
 
 # n-gramm analysis --------------------------------------------------------
@@ -235,7 +240,6 @@ bigram_freq <- filtered_bigrams_all_sites %>%
   ggplot(aes(bigram, n, fill=site)) + geom_col(show.legend = FALSE) + xlab(NULL) + coord_flip() +
   facet_wrap(~site, ncol=2, scales = "free") +
   scale_x_reordered()
-
 bigram_freq
 ggsave("plots/bigram_freq.png", plot = bigram_freq)
 
@@ -259,8 +263,16 @@ not_words_contribution <- not_words %>%
   xlab('Word preceded by "nem" which is the hungarian form of "not".') +
   ylab('Sentiment score * number of occurences') +
   coord_flip()
-
+not_words_contribution
 ggsave("plots/not_words_contribution.png", plot = not_words_contribution)
+
+negative <- bigrams_all_sites %>% 
+  filter(word1 == 'negatív') %>% 
+  count(bigram, sort = TRUE)
+
+positive <- bigrams_all_sites %>% 
+  filter(word1 == 'pozitív') %>% 
+  count(bigram, sort = TRUE)
 
 # network visualizations
 
@@ -282,15 +294,85 @@ ggsave("plots/network_all.png", plot = network_all)
 
 # LDA ---------------------------------------------------------------------
 
+#prepocessing data
 
-chapters_dtm <- word_counts %>%
-  cast_dtm(document, word, n)
+words_all_sites_by_site <-tidy_all_sites %>%
+  group_by(site) %>% 
+  count(word, sort = TRUE)
 
-chapters_dtm
+words_all_sites_by_article <-tidy_all_sites %>%
+  group_by(site, title) %>% 
+  count(word, sort = TRUE)
+
+words_all_sites_by_site_dtm <- words_all_sites_by_site %>%
+  cast_dtm(document=site, word, n)
+
+#trying to find two sides on
+sites_lda_2 <- LDA(words_all_sites_by_site_dtm, k = 2, control = list(seed = 1234))
+sites_topics_2 <- tidy(sites_lda_2, matrix = "beta")
+
+sites_top_terms_2 <- sites_topics_2 %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+site_topics_2 <- sites_top_terms_2 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+site_topics_2
+ggsave("plots/site_topics_2.png", plot = site_topics_2)
 
 
-data("AssociatedPress")
-a<- AssociatedPress
+beta_spread_2 <- sites_topics_2 %>%
+  mutate(topic = paste0("topic", topic)) %>%
+  spread(topic, beta) %>%
+  filter(topic1 > .001 | topic2 > .001) %>%
+  mutate(log_ratio = log2(topic2 / topic1)) %>% 
+  mutate(term = reorder(term, abs(log_ratio)))
+
+beta_spread_plot_2 <- beta_spread_2 %>% 
+  filter(abs(log_ratio) > 4 ) %>% 
+  mutate(term = reorder(term, log_ratio)) %>% 
+ggplot( aes(term, log_ratio)) + geom_col(show.legend = FALSE) +
+  labs(y = "Log2 ratio of beta in topic2/ topic1", x = NULL) + coord_flip() 
+beta_spread_plot_2
+ggsave("plots/beta_spread_plot_2.png", plot = beta_spread_plot_2)
+
+#TODO: match sites
+
+
+# trying to find four sites
+sites_lda_4 <- LDA(words_all_sites_by_site_dtm, k = 4, control = list(seed = 1234))
+sites_topics_4 <- tidy(sites_lda_4, matrix = "beta")
+
+sites_top_terms_4 <- sites_topics_4 %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+site_topics_4 <- sites_top_terms_4 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+site_topics_4
+ggsave("plots/site_topics_4.png", plot = site_topics_4)
+
+# TODO: match sites
+
+# TODO: LDA on articles
+
+
+
+# TODOS -------------------------------------------------------------------
 
 # TODO: network graphs by articles
 
@@ -300,7 +382,6 @@ a<- AssociatedPress
 # TODO covid sentiment lexicon
 # TODO better hungarian lexicon
 
-# TODO LDA
 
 
 
