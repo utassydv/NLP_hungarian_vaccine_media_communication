@@ -10,6 +10,7 @@ library(stringr)
 library(igraph)
 library(ggraph)
 library(topicmodels)
+library(tidyr)
 
 # data preparation ------------------------------------------------------------
 
@@ -107,6 +108,7 @@ heatmap<- ggplot(melt(matrix), aes(x = Var1, y = Var2, fill = value)) +
         legend.text = element_text(size=6),
         legend.title =element_text(size=6)
 )
+heatmap
 ggsave("plots/heatmap.png", plot = heatmap)
 
 telex_origo <- ggplot(frequency, aes(x = www.telex.hu, y = www.origo.hu, label = word)) + 
@@ -294,83 +296,135 @@ ggsave("plots/network_all.png", plot = network_all)
 
 # LDA ---------------------------------------------------------------------
 
-#prepocessing data
-
-words_all_sites_by_site <-tidy_all_sites %>%
-  group_by(site) %>% 
-  count(word, sort = TRUE)
+#prepocessing data for LDA
 
 words_all_sites_by_article <-tidy_all_sites %>%
   group_by(site, title) %>% 
   count(word, sort = TRUE)
 
-words_all_sites_by_site_dtm <- words_all_sites_by_site %>%
-  cast_dtm(document=site, word, n)
+word_all_sites_by_article_dtm <- words_all_sites_by_article %>%
+  cast_dtm(document=title, word, n)
 
-#trying to find two sides on
-sites_lda_2 <- LDA(words_all_sites_by_site_dtm, k = 2, control = list(seed = 1234))
-sites_topics_2 <- tidy(sites_lda_2, matrix = "beta")
+all_sites_dtm <- tidy_all_sites %>% 
+  group_by(site, title) %>% 
+  count(title, word, sort = TRUE) %>% 
+  cast_dtm(document=title, word, n)
 
-sites_top_terms_2 <- sites_topics_2 %>%
+# LDA on articles ------------------------------------------------------------
+
+#trying to find two topics
+art_lda_2 <- LDA(word_all_sites_by_article_dtm, k = 2, control = list(seed = 1234))
+art_topics_2 <- tidy(art_lda_2, matrix = "beta")
+
+art_top_terms_2 <- art_topics_2 %>%
   group_by(topic) %>%
   top_n(10, beta) %>%
   ungroup() %>%
   arrange(topic, -beta)
 
-site_topics_2 <- sites_top_terms_2 %>%
+art_topics_plot_2 <- art_top_terms_2 %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(term, beta, fill = factor(topic))) +
   geom_col(show.legend = FALSE) +
   facet_wrap(~ topic, scales = "free") +
   coord_flip() +
   scale_x_reordered()
-site_topics_2
-ggsave("plots/site_topics_2.png", plot = site_topics_2)
+art_topics_plot_2
+ggsave("plots/art_topics_plot_2.png", plot = art_topics_plot_2)
 
 
-beta_spread_2 <- sites_topics_2 %>%
+art_beta_spread_2 <- art_topics_2 %>%
   mutate(topic = paste0("topic", topic)) %>%
   spread(topic, beta) %>%
   filter(topic1 > .001 | topic2 > .001) %>%
   mutate(log_ratio = log2(topic2 / topic1)) %>% 
   mutate(term = reorder(term, abs(log_ratio)))
 
-beta_spread_plot_2 <- beta_spread_2 %>% 
+art_beta_spread_plot_2 <- art_beta_spread_2 %>% 
   filter(abs(log_ratio) > 4 ) %>% 
   mutate(term = reorder(term, log_ratio)) %>% 
-ggplot( aes(term, log_ratio)) + geom_col(show.legend = FALSE) +
+  ggplot( aes(term, log_ratio)) + geom_col(show.legend = FALSE) +
   labs(y = "Log2 ratio of beta in topic2/ topic1", x = NULL) + coord_flip() 
-beta_spread_plot_2
-ggsave("plots/beta_spread_plot_2.png", plot = beta_spread_plot_2)
+art_beta_spread_plot_2
+ggsave("plots/art_beta_spread_plot_2.png", plot = art_beta_spread_plot_2)
 
 #TODO: match sites
 
 
-# trying to find four sites
-sites_lda_4 <- LDA(words_all_sites_by_site_dtm, k = 4, control = list(seed = 1234))
-sites_topics_4 <- tidy(sites_lda_4, matrix = "beta")
+# trying to find 4 topics
+art_lda_4 <- LDA(word_all_sites_by_article_dtm, k = 4, control = list(seed = 1234))
+art_topics_4 <- tidy(art_lda_4, matrix = "beta")
 
-sites_top_terms_4 <- sites_topics_4 %>%
+art_top_terms_4 <- art_topics_4 %>%
   group_by(topic) %>%
   top_n(10, beta) %>%
   ungroup() %>%
   arrange(topic, -beta)
 
-site_topics_4 <- sites_top_terms_4 %>%
+art_topics_plot_4 <- art_top_terms_4 %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(term, beta, fill = factor(topic))) +
   geom_col(show.legend = FALSE) +
   facet_wrap(~ topic, scales = "free") +
   coord_flip() +
   scale_x_reordered()
-site_topics_4
-ggsave("plots/site_topics_4.png", plot = site_topics_4)
-
-# TODO: match sites
-
-# TODO: LDA on articles
+art_topics_plot_4
+ggsave("plots/art_topics_plot_4.png", plot = art_topics_plot_4)
 
 
+# trying to find 10 topics
+art_lda <- LDA(words_all_sites_by_article_dtm, k = 10, control = list(seed = 1234))
+art_topics <- tidy(art_lda, matrix = "beta")
+
+art_top_terms <- art_topics %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+art_topics_plot <- art_top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+art_topics_plot
+ggsave("plots/art_topics_plot.png", plot = art_topics_plot)
+
+
+
+gamma <- art_lda_4 %>%
+  tidy(matrix = "gamma")
+
+tmp <- left_join(gamma, all_sites, by = c("document" = "title"))
+
+plot_4 <- tmp %>% 
+  mutate(site = reorder(site, gamma * topic)) %>%
+  ggplot(aes(factor(topic), gamma)) +
+  geom_boxplot() +
+  facet_wrap(~ site) +
+  labs(x = "Topic",
+       y = "# of messages where this was the highest % topic")
+plot_4
+ggsave("plots/plot_4.png", plot = plot_4)
+
+
+########
+gamma <- art_lda_2 %>%
+  tidy(matrix = "gamma")
+
+tmp <- left_join(gamma, all_sites, by = c("document" = "title"))
+
+plot_2 <- tmp %>% 
+  mutate(site = reorder(site, gamma * topic)) %>%
+  ggplot(aes(factor(topic), gamma)) +
+  geom_boxplot() +
+  facet_wrap(~ site) +
+  labs(x = "Topic",
+       y = "# of messages where this was the highest % topic")
+plot_2
+ggsave("plots/plot_2.png", plot = plot_2)
 
 # TODOS -------------------------------------------------------------------
 
