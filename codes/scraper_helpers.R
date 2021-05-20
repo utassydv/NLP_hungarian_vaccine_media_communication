@@ -205,7 +205,7 @@ get_urls_from_one_page_24hu  <- function(my_url) {
 
 get_24hu_urls <- function(searchterm, page_to_download) {
   # create links
-  links_to_get <- paste0('https://24.hu/page/', seq(1, page_to_download) ,'/?s=', searchterm)
+  links_to_get <- paste0('https://24.hu/tag/', searchterm,'vakcina/page/', seq(1, page_to_download))
   ret_df <- rbindlist(lapply(links_to_get, get_urls_from_one_page_24hu))
   return(ret_df)
 }

@@ -13,10 +13,11 @@ library(topicmodels)
 library(tidyr)
 library(widyr)
 
+
 # data preparation ------------------------------------------------------------
 
 articles_telex <- readRDS('data/raw/articles_telex.rds')
-articles_24hu <- readRDS('data/raw/articles_24hu.rds')
+articles_24hu <- readRDS('data/raw/articles_24hu_new.rds')
 articles_index<- readRDS('data/raw/articles_index.rds')
 articles_origo<- readRDS('data/raw/articles_origo.rds')
 
@@ -161,11 +162,62 @@ sentiment_contributions_fixed <- tidy_all_sites_sentiment %>%
 sentiment_contributions_fixed
 ggsave("plots/sentiment_contributions_fixed.png", plot = sentiment_contributions_fixed)
 
-#TODO: time series sentiment
-#TODO: compare average sentiment of sites
+#DAILY
+#aggregated time series sentiment
+daily_sentiment_score <- tidy_all_sites_sentiment %>% 
+  group_by(date = as.Date(date)) %>% 
+  summarise( daily_sentiment_norm = sum(sentiment)/n(),
+             n=n(),
+             daily_sentiment= sum(sentiment))
 
+ggplot(daily_sentiment_score, aes(x=date,y=daily_sentiment_norm)) +
+  geom_col(show.legend = FALSE)
+ggsave("plots/daily_ag_sentiment.png")
 
-# tf-idf ------------------------------------------------------------------
+#aggregated time series sentiment by site
+daily_sentiment_score <- tidy_all_sites_sentiment %>% 
+  group_by(date = as.Date(date), site) %>% 
+  summarise( daily_sentiment_norm = sum(sentiment)/n(),
+             n=n(),
+             daily_sentiment= sum(sentiment))
+
+ggplot(daily_sentiment_score, aes(x=date,y=daily_sentiment_norm, fill = site)) +
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~site, ncol = 1, scales = "free_y")
+ggsave("plots/daily_site_sentiment.png")
+  
+# WEEKLY
+#aggregated time series sentiment
+weekly_sentiment_score <- tidy_all_sites_sentiment %>% 
+  group_by(year = year(date),
+           week = week(date)) %>% 
+  summarise( daily_sentiment_norm = sum(sentiment)/n(),
+             n=n(),
+             daily_sentiment= sum(sentiment)) %>% 
+  mutate( date = make_date(year) + weeks(week))
+
+ggplot(weekly_sentiment_score, aes(x=date,y=daily_sentiment_norm)) +
+  geom_col(show.legend = FALSE)
+ggsave("plots/weekly_ag_sentiment.png")
+
+#aggregated time series sentiment by site
+weekly_sentiment_score <- tidy_all_sites_sentiment %>% 
+  group_by(year = year(date),
+           week = week(date),
+           site) %>% 
+  summarise( daily_sentiment_norm = sum(sentiment)/n(),
+             n=n(),
+             daily_sentiment= sum(sentiment)) %>% 
+  mutate( date = make_date(year) + weeks(week))
+
+ggplot(weekly_sentiment_score, aes(x=date,y=daily_sentiment_norm, fill = site)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~site, ncol = 1, scales = "free_y")
+ggsave("plots/weekly_site_sentiment.png")
+
+#TODO compare average sentiment of sites
+
+# tf-idf -------------------  -----------------------------------------------
 
 site_words <- all_sites %>% 
   unnest_tokens(word, content_full) %>% 
@@ -206,10 +258,6 @@ tf_idf <- site_words %>%
   coord_flip()
 tf_idf
 ggsave("plots/tf_idf.png", plot = tf_idf)
-
-# there are lot of unmeaningful terms here
-# TODO more data cleaning needed!
-
 
 # n-gramm analysis --------------------------------------------------------
 
@@ -306,11 +354,6 @@ words_all_sites_by_article <-tidy_all_sites %>%
 word_all_sites_by_article_dtm <- words_all_sites_by_article %>%
   cast_dtm(document=title, word, n)
 
-all_sites_dtm <- tidy_all_sites %>% 
-  group_by(site, title) %>% 
-  count(title, word, sort = TRUE) %>% 
-  cast_dtm(document=title, word, n)
-
 # LDA on articles ------------------------------------------------------------
 
 #trying to find two topics
@@ -349,8 +392,6 @@ art_beta_spread_plot_2 <- art_beta_spread_2 %>%
 art_beta_spread_plot_2
 ggsave("plots/art_beta_spread_plot_2.png", plot = art_beta_spread_plot_2)
 
-#TODO: match sites
-
 
 # trying to find 4 topics
 art_lda_4 <- LDA(word_all_sites_by_article_dtm, k = 4, control = list(seed = 1234))
@@ -373,26 +414,6 @@ art_topics_plot_4
 ggsave("plots/art_topics_plot_4.png", plot = art_topics_plot_4)
 
 
-# trying to find 10 topics
-art_lda <- LDA(words_all_sites_by_article_dtm, k = 10, control = list(seed = 1234))
-art_topics <- tidy(art_lda, matrix = "beta")
-
-art_top_terms <- art_topics %>%
-  group_by(topic) %>%
-  top_n(5, beta) %>%
-  ungroup() %>%
-  arrange(topic, -beta)
-
-art_topics_plot <- art_top_terms %>%
-  mutate(term = reorder_within(term, beta, topic)) %>%
-  ggplot(aes(term, beta, fill = factor(topic))) +
-  geom_col(show.legend = FALSE) +
-  facet_wrap(~ topic, scales = "free") +
-  coord_flip() +
-  scale_x_reordered()
-art_topics_plot
-ggsave("plots/art_topics_plot.png", plot = art_topics_plot)
-
 # Categorizing articles
 # w 4 topics
 gamma <- art_lda_4 %>%
@@ -413,7 +434,7 @@ ggsave("plots/plot_4.png", plot = plot_4)
 
 ########
 # Categorizing articles
-# w 4 topics
+# w 2 topics
 gamma <- art_lda_2 %>%
   tidy(matrix = "gamma")
 
@@ -446,14 +467,15 @@ saveRDS(coocurring_words, file = 'data/raw/coocurring_words_content.rds')
 
 set.seed(1234)
 coocurring_words_content_plot <- coocurring_words %>%
-  filter(n >= 750) %>%
+  filter(n >= 1050) %>%
   graph_from_data_frame() %>%
   ggraph(layout = "fr") +
   geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
   geom_node_point(size = 5) +
   geom_node_text(aes(label = name), repel = TRUE, 
                  point.padding = unit(0.2, "lines")) +
-  theme_void()
+  theme_void()+
+  ggtitle("Co-occuring words in the content of articles")
 coocurring_words_content_plot
 ggsave("plots/coocurring_words_content_plot.png", plot = coocurring_words_content_plot)
 
@@ -477,15 +499,112 @@ coocurring_words_content_plot_title <- coocurring_words_title %>%
   geom_node_point(size = 5) +
   geom_node_text(aes(label = name), repel = TRUE, 
                  point.padding = unit(0.2, "lines")) +
-  theme_void()
+  theme_void()+
+  ggtitle("Co-occuring words in all article titles")
 coocurring_words_content_plot_title
 ggsave("plots/coocurring_words_content_plot_title.png", plot = coocurring_words_content_plot_title)
 
+#TODO run these + set n
+# with content of titles TELEX
+tidy_all_sites_by_title <- all_sites %>% 
+  filter(site=='telex') %>% 
+  unnest_tokens(word, title, drop=F) %>% 
+  filter(!str_detect(word, "\\d+")) %>% 
+  anti_join(hu_stop_word) %>% 
+  count(title, word)
 
-# TODOS -------------------------------------------------------------------
+coocurring_words_title <- tidy_all_sites_by_title %>% pairwise_count(word, title, sort = TRUE, upper = FALSE)
+saveRDS(coocurring_words_title, file = 'data/raw/coocurring_words_title_telex.rds')
 
-# TODO time graphs
-# TODO time related stuff
+set.seed(1234)
 
-# TODO covid sentiment lexicon
-# TODO better hungarian lexicon
+coocurring_words_content_plot_title <- coocurring_words_title %>%
+  filter(n >= 10) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()+
+  ggtitle("Co-occuring words in article titles (telex.hu)")
+coocurring_words_content_plot_title
+ggsave("plots/coocurring_words_content_plot_title_telex.png", plot = coocurring_words_content_plot_title)
+
+# with content of titles index
+tidy_all_sites_by_title <- all_sites %>% 
+  filter(site=='index') %>% 
+unnest_tokens(word, title, drop=F) %>% 
+  filter(!str_detect(word, "\\d+")) %>% 
+  anti_join(hu_stop_word) %>% 
+  count(title, word)
+
+coocurring_words_title <- tidy_all_sites_by_title %>% pairwise_count(word, title, sort = TRUE, upper = FALSE)
+saveRDS(coocurring_words_title, file = 'data/raw/coocurring_words_title_index.rds')
+
+set.seed(1234)
+
+coocurring_words_content_plot_title <- coocurring_words_title %>%
+  filter(n >= 15) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()+
+  ggtitle("Co-occuring words in article titles (index.hu)")
+coocurring_words_content_plot_title
+ggsave("plots/coocurring_words_content_plot_title_index.png", plot = coocurring_words_content_plot_title)
+
+# with content of titles 24hu
+tidy_all_sites_by_title <- all_sites %>% 
+  filter(site=='24hu') %>% 
+unnest_tokens(word, title, drop=F) %>% 
+  filter(!str_detect(word, "\\d+")) %>% 
+  anti_join(hu_stop_word) %>% 
+  count(title, word)
+
+coocurring_words_title <- tidy_all_sites_by_title %>% pairwise_count(word, title, sort = TRUE, upper = FALSE)
+saveRDS(coocurring_words_title, file = 'data/raw/coocurring_words_title_24hu.rds')
+
+set.seed(1234)
+
+coocurring_words_content_plot_title <- coocurring_words_title %>%
+  filter(n >= 10) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()+
+  ggtitle("Co-occuring words in article titles (24.hu)")
+coocurring_words_content_plot_title
+ggsave("plots/coocurring_words_content_plot_title_24hu.png", plot = coocurring_words_content_plot_title)
+
+# with content of titles origo
+tidy_all_sites_by_title <- all_sites %>% 
+  filter(site=='origo') %>% 
+unnest_tokens(word, title, drop=F) %>% 
+  filter(!str_detect(word, "\\d+")) %>% 
+  anti_join(hu_stop_word) %>% 
+  count(title, word)
+
+coocurring_words_title <- tidy_all_sites_by_title %>% pairwise_count(word, title, sort = TRUE, upper = FALSE)
+saveRDS(coocurring_words_title, file = 'data/raw/coocurring_words_title_origo.rds')
+
+set.seed(1234)
+
+coocurring_words_content_plot_title <- coocurring_words_title %>%
+  filter(n >= 15) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void() +
+  ggtitle("Co-occuring words in article titles (origo.hu)")
+coocurring_words_content_plot_title
+ggsave("plots/coocurring_words_content_plot_title_origo.png", plot = coocurring_words_content_plot_title)
