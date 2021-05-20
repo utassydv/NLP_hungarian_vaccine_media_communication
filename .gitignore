@@ -1,3 +1,5 @@
 *.Rproj
 *.Rproj.user
 .Rproj.user
+
+data/raw/coocurring_words_content.rds

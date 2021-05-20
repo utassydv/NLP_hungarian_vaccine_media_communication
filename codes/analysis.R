@@ -11,6 +11,7 @@ library(igraph)
 library(ggraph)
 library(topicmodels)
 library(tidyr)
+library(widyr)
 
 # data preparation ------------------------------------------------------------
 
@@ -392,8 +393,8 @@ art_topics_plot <- art_top_terms %>%
 art_topics_plot
 ggsave("plots/art_topics_plot.png", plot = art_topics_plot)
 
-
-
+# Categorizing articles
+# w 4 topics
 gamma <- art_lda_4 %>%
   tidy(matrix = "gamma")
 
@@ -411,6 +412,8 @@ ggsave("plots/plot_4.png", plot = plot_4)
 
 
 ########
+# Categorizing articles
+# w 4 topics
 gamma <- art_lda_2 %>%
   tidy(matrix = "gamma")
 
@@ -426,17 +429,63 @@ plot_2 <- tmp %>%
 plot_2
 ggsave("plots/plot_2.png", plot = plot_2)
 
-# TODOS -------------------------------------------------------------------
 
-# TODO: network graphs by articles
+# more meaningfull graph visualisations -----------------------------------
+library(widyr)
+
+#with content of articles
+tidy_all_sites_by_article <- all_sites %>% 
+  unnest_tokens(word, content_full) %>% 
+  filter(!str_detect(word, "\\d+")) %>% 
+  anti_join(hu_stop_word) %>% 
+  count(title, word)
+
+coocurring_words <- tidy_all_sites_by_article %>% pairwise_count(word, title, sort = TRUE, upper = FALSE)
+saveRDS(coocurring_words, file = 'data/raw/coocurring_words_content.rds')
+
+
+set.seed(1234)
+coocurring_words_content_plot <- coocurring_words %>%
+  filter(n >= 750) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()
+coocurring_words_content_plot
+ggsave("plots/coocurring_words_content_plot.png", plot = coocurring_words_content_plot)
+
+# with content of titles
+tidy_all_sites_by_title <- all_sites %>% 
+  unnest_tokens(word, title, drop=F) %>% 
+  filter(!str_detect(word, "\\d+")) %>% 
+  anti_join(hu_stop_word) %>% 
+  count(title, word)
+
+coocurring_words_title <- tidy_all_sites_by_title %>% pairwise_count(word, title, sort = TRUE, upper = FALSE)
+saveRDS(coocurring_words_title, file = 'data/raw/coocurring_words_title.rds')
+
+set.seed(1234)
+
+coocurring_words_content_plot_title <- coocurring_words_title %>%
+  filter(n >= 15) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()
+coocurring_words_content_plot_title
+ggsave("plots/coocurring_words_content_plot_title.png", plot = coocurring_words_content_plot_title)
+
+
+# TODOS -------------------------------------------------------------------
 
 # TODO time graphs
 # TODO time related stuff
 
 # TODO covid sentiment lexicon
 # TODO better hungarian lexicon
-
-
-
-
-
